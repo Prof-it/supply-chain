@@ -1,7 +1,10 @@
-
 # NSGA-II Nursing Service Location Optimization in Berlin
 
 This project demonstrates a multi-objective optimization using the NSGA-II genetic algorithm to find optimal locations for nursing service centers in a simulated Berlin area. The optimization evolves over multiple generations and is visualized using an interactive map in Streamlit.
+
+## Demo
+
+<video src="streamlit-london-overlay-nsga-map-app-2025-06-03-04-06-90.webm" controls width="800"></video>
 
 ## Features
 
@@ -32,7 +35,7 @@ pip install streamlit pymoo numpy pandas
 ## Running the App
 
 ```bash
-streamlit run berlin_nsga_map_app.py
+streamlit run london-overlay-nsga-map-app.py
 ```
 
 This will open a new browser window with the interactive map interface.
@@ -45,10 +48,11 @@ This will open a new browser window with the interactive map interface.
 
 ## Optional Extensions
 
-- Add population density data using a heatmap overlay.
 - Include real healthcare facility locations as constraints.
 - Replace the objective function with real-world service efficiency metrics.
 
 ## License
 
-This project is open-source and free to use for academic or demonstration purposes.
+This software is licensed for NON-COMMERCIAL use only. For commercial use, please contact prof.dr.rer.nat.lu@gmail.com.
+
+See [LICENSE](LICENSE) for license details.

@@ -7,6 +7,9 @@ from pymoo.optimize import minimize
 from pymoo.algorithms.moo.nsga2 import NSGA2
 import time
 
+# Set page config to wide mode
+st.set_page_config(layout="wide")
+
 # London bounds
 LAT_MIN, LAT_MAX = 51.3, 51.7
 LON_MIN, LON_MAX = -0.5, 0.3
@@ -99,10 +102,12 @@ if st.session_state.is_playing:
     st.rerun()
     st.stop()  # Prevents double rendering
 
-# --- Play/Pause Button (top, single) ---
-play_pause = st.button("▶️ Play" if not st.session_state.is_playing else "⏸️ Pause")
-if play_pause:
-    st.session_state.is_playing = not st.session_state.is_playing
+# --- Play Button (top, single-step) ---
+play_step = st.button("▶️ Step")
+if play_step:
+    next_gen = (st.session_state.generation_slider + 1) % num_gens
+    st.session_state.generation_slider = next_gen
+    st.rerun()
 
 # --- Slider (single, controls both) ---
 generation = st.slider(
@@ -130,7 +135,7 @@ layer_patients = pdk.Layer(
     get_weight="count",
     radiusPixels=60,
     intensity=0.6,
-    opacity=0.6,
+    opacity=0.7,
     color_range=[
         [255, 255, 255, 0],
         [173, 216, 230, 60],
@@ -145,16 +150,16 @@ layer_candidates_single = pdk.Layer(
     "ScatterplotLayer",
     candidates_df_single,
     get_position="[lon, lat]",
-    get_fill_color="[0, 0, 200, 160]",
-    get_radius=100,
+    get_fill_color="[220, 20, 60, 220]",  # Bright red, more opaque
+    get_radius=250,                      # Bigger points
 )
 
 layer_candidates_multi = pdk.Layer(
     "ScatterplotLayer",
     candidates_df_multi,
     get_position="[lon, lat]",
-    get_fill_color="[30, 144, 255, 100]",
-    get_radius=120,
+    get_fill_color="[220, 20, 60, 180]",  # Bright red, slightly less opaque
+    get_radius=250,                      # Bigger points
 )
 
 view_state = pdk.ViewState(latitude=CENTER_LAT, longitude=CENTER_LON, zoom=10)
