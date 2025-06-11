@@ -56,3 +56,9 @@ This will open a new browser window with the interactive map interface.
 This software is licensed for NON-COMMERCIAL use only. For commercial use, please contact prof.dr.rer.nat.lu@gmail.com.
 
 See [LICENSE](LICENSE) for license details.
+
+## Project QR Code
+
+Scan to visit the GitHub repository:
+
+![QR Code for GitHub Repo](https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://github.com/Prof-it/supply-chain)
