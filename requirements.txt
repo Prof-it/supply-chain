@@ -1,0 +1,7 @@
+streamlit
+pydeck
+numpy
+pandas
+matplotlib
+pymoo
+openpyxl
