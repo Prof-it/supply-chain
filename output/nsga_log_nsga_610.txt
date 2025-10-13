@@ -1,0 +1,96 @@
+[2025-10-13 16:16:34] Iteration 1/10 started.
+[2025-10-13 16:16:35] Iteration 1: Pareto front size = 1
+[2025-10-13 16:16:35] Iteration 1: Cost = [3.22868279e+06 1.18557892e+02]
+[2025-10-13 16:16:35] Iteration 2/10 started.
+[2025-10-13 16:16:37] Iteration 2: Pareto front size = 3
+[2025-10-13 16:16:37] Iteration 2: Cost = [3.22868279e+06 1.18557892e+02]
+[2025-10-13 16:16:37] Iteration 2: Cost = [2.78440540e+06 1.38243221e+02]
+[2025-10-13 16:16:37] Iteration 2: Cost = [3.04178130e+06 1.29534266e+02]
+[2025-10-13 16:16:37] Iteration 3/10 started.
+[2025-10-13 16:16:38] Iteration 3: Pareto front size = 3
+[2025-10-13 16:16:38] Iteration 3: Cost = [3.22868279e+06 1.18557892e+02]
+[2025-10-13 16:16:38] Iteration 3: Cost = [2.78440540e+06 1.38243221e+02]
+[2025-10-13 16:16:38] Iteration 3: Cost = [3.02659004e+06 1.24591048e+02]
+[2025-10-13 16:16:38] Iteration 4/10 started.
+[2025-10-13 16:16:40] Iteration 4: Pareto front size = 3
+[2025-10-13 16:16:40] Iteration 4: Cost = [3.22868279e+06 1.18557892e+02]
+[2025-10-13 16:16:40] Iteration 4: Cost = [2.78440540e+06 1.38243221e+02]
+[2025-10-13 16:16:40] Iteration 4: Cost = [3.02659004e+06 1.24591048e+02]
+[2025-10-13 16:16:40] Iteration 5/10 started.
+[2025-10-13 16:16:41] Iteration 5: Pareto front size = 4
+[2025-10-13 16:16:41] Iteration 5: Cost = [3.22868279e+06 1.18557892e+02]
+[2025-10-13 16:16:41] Iteration 5: Cost = [2.78440540e+06 1.38243221e+02]
+[2025-10-13 16:16:41] Iteration 5: Cost = [3.02659004e+06 1.24591048e+02]
+[2025-10-13 16:16:41] Iteration 5: Cost = [2.92973902e+06 1.34044534e+02]
+[2025-10-13 16:16:41] Iteration 6/10 started.
+[2025-10-13 16:16:42] Iteration 6: Pareto front size = 5
+[2025-10-13 16:16:42] Iteration 6: Cost = [3.22868279e+06 1.18557892e+02]
+[2025-10-13 16:16:42] Iteration 6: Cost = [2.78440540e+06 1.38243221e+02]
+[2025-10-13 16:16:42] Iteration 6: Cost = [3.02659004e+06 1.24591048e+02]
+[2025-10-13 16:16:42] Iteration 6: Cost = [2.92973902e+06 1.34044534e+02]
+[2025-10-13 16:16:42] Iteration 6: Cost = [2.95806091e+06 1.29608250e+02]
+[2025-10-13 16:16:42] Iteration 7/10 started.
+[2025-10-13 16:16:44] Iteration 7: Pareto front size = 5
+[2025-10-13 16:16:44] Iteration 7: Cost = [3.22868279e+06 1.18557892e+02]
+[2025-10-13 16:16:44] Iteration 7: Cost = [2.78440540e+06 1.38243221e+02]
+[2025-10-13 16:16:44] Iteration 7: Cost = [3.02659004e+06 1.24591048e+02]
+[2025-10-13 16:16:44] Iteration 7: Cost = [2.92973902e+06 1.34044534e+02]
+[2025-10-13 16:16:44] Iteration 7: Cost = [2.95806091e+06 1.29608250e+02]
+[2025-10-13 16:16:44] Iteration 8/10 started.
+[2025-10-13 16:16:45] Iteration 8: Pareto front size = 4
+[2025-10-13 16:16:45] Iteration 8: Cost = [3.22868279e+06 1.18557892e+02]
+[2025-10-13 16:16:45] Iteration 8: Cost = [2.78440540e+06 1.38243221e+02]
+[2025-10-13 16:16:45] Iteration 8: Cost = [3.02659004e+06 1.24591048e+02]
+[2025-10-13 16:16:45] Iteration 8: Cost = [2.89385123e+06 1.25140187e+02]
+[2025-10-13 16:16:45] Iteration 9/10 started.
+[2025-10-13 16:16:47] Iteration 9: Pareto front size = 6
+[2025-10-13 16:16:47] Iteration 9: Cost = [3.22868279e+06 1.18557892e+02]
+[2025-10-13 16:16:47] Iteration 9: Cost = [2.78440540e+06 1.38243221e+02]
+[2025-10-13 16:16:47] Iteration 9: Cost = [3.02659004e+06 1.24591048e+02]
+[2025-10-13 16:16:47] Iteration 9: Cost = [2.89385123e+06 1.25140187e+02]
+[2025-10-13 16:16:47] Iteration 9: Cost = [3.02887473e+06 1.19750381e+02]
+[2025-10-13 16:16:47] Iteration 9: Cost = [2.81964663e+06 1.29274048e+02]
+[2025-10-13 16:16:47] Iteration 10/10 started.
+[2025-10-13 16:16:48] Iteration 10: Pareto front size = 6
+[2025-10-13 16:16:48] Iteration 10: Cost = [3.22868279e+06 1.18557892e+02]
+[2025-10-13 16:16:48] Iteration 10: Cost = [2.78440540e+06 1.38243221e+02]
+[2025-10-13 16:16:48] Iteration 10: Cost = [3.02659004e+06 1.24591048e+02]
+[2025-10-13 16:16:48] Iteration 10: Cost = [2.89385123e+06 1.25140187e+02]
+[2025-10-13 16:16:48] Iteration 10: Cost = [3.02887473e+06 1.19750381e+02]
+[2025-10-13 16:16:48] Iteration 10: Cost = [2.81192313e+06 1.28674327e+02]
+[2025-10-13 16:16:48] NSGA-II optimization completed in 14.07 seconds.
+[2025-10-13 16:19:16] Iteration 1/10 started.
+[2025-10-13 16:19:18] Iteration 1: Pareto front size = 1
+[2025-10-13 16:19:18] Iteration 1: Cost = [2.75892740e+06 1.24552103e+02]
+[2025-10-13 16:19:18] Iteration 2/10 started.
+[2025-10-13 16:19:20] Iteration 2: Pareto front size = 1
+[2025-10-13 16:19:20] Iteration 2: Cost = [2.70596852e+06 1.22292012e+02]
+[2025-10-13 16:19:20] Iteration 3/10 started.
+[2025-10-13 16:19:22] Iteration 3: Pareto front size = 1
+[2025-10-13 16:19:22] Iteration 3: Cost = [2.70596852e+06 1.22292012e+02]
+[2025-10-13 16:19:22] Iteration 4/10 started.
+[2025-10-13 16:19:23] Iteration 4: Pareto front size = 1
+[2025-10-13 16:19:23] Iteration 4: Cost = [2.70596852e+06 1.22292012e+02]
+[2025-10-13 16:19:23] Iteration 5/10 started.
+[2025-10-13 16:19:25] Iteration 5: Pareto front size = 1
+[2025-10-13 16:19:25] Iteration 5: Cost = [2.70596852e+06 1.22292012e+02]
+[2025-10-13 16:19:25] Iteration 6/10 started.
+[2025-10-13 16:19:27] Iteration 6: Pareto front size = 1
+[2025-10-13 16:19:27] Iteration 6: Cost = [2.70596852e+06 1.22292012e+02]
+[2025-10-13 16:19:27] Iteration 7/10 started.
+[2025-10-13 16:19:29] Iteration 7: Pareto front size = 1
+[2025-10-13 16:19:29] Iteration 7: Cost = [2.70596852e+06 1.22292012e+02]
+[2025-10-13 16:19:29] Iteration 8/10 started.
+[2025-10-13 16:19:31] Iteration 8: Pareto front size = 2
+[2025-10-13 16:19:31] Iteration 8: Cost = [2.70596852e+06 1.22292012e+02]
+[2025-10-13 16:19:31] Iteration 8: Cost = [2.98692534e+06 1.17893072e+02]
+[2025-10-13 16:19:31] Iteration 9/10 started.
+[2025-10-13 16:19:33] Iteration 9: Pareto front size = 2
+[2025-10-13 16:19:33] Iteration 9: Cost = [2.70596852e+06 1.22292012e+02]
+[2025-10-13 16:19:33] Iteration 9: Cost = [2.98692534e+06 1.17893072e+02]
+[2025-10-13 16:19:33] Iteration 10/10 started.
+[2025-10-13 16:19:35] Iteration 10: Pareto front size = 3
+[2025-10-13 16:19:35] Iteration 10: Cost = [2.70596852e+06 1.22292012e+02]
+[2025-10-13 16:19:35] Iteration 10: Cost = [2.97121228e+06 1.12933477e+02]
+[2025-10-13 16:19:35] Iteration 10: Cost = [2.82839174e+06 1.19629872e+02]
+[2025-10-13 16:19:35] NSGA-II optimization completed in 18.95 seconds.

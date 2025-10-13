@@ -12,8 +12,10 @@ import json
 import requests
 from PIL import Image
 from io import BytesIO
+import time
 
 
+# --- Caching Functions ---
 def cache_exists(cache_file):
     return os.path.exists(cache_file)
 
@@ -35,6 +37,14 @@ def get_param_hash(data, MaxIt, nPop, pCrossover, pMutation, patience):
     param_str = json.dumps(param_dict, sort_keys=True)
     return hashlib.md5(param_str.encode('utf-8')).hexdigest()
 
+# --- Logging Function ---
+def log_with_timestamp(message, log_file=None):
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    msg = f"[{timestamp}] {message}"
+    print(msg)
+    if log_file is not None:
+        with open(log_file, "a") as f:
+            f.write(msg + "\n")
 
 # --- Global Data Setup (Converted from initial_data.m, demand_data.m, coordinate_data.m) ---
 # Update initialize_data to accept Em and xy_community as arguments
@@ -424,7 +434,7 @@ def mutate(p_x, data):
 
 # --- Main NSGA-II Loop ---
 
-def nsga_ii_optimization_with_label(data, label, MaxIt, nPop, pCrossover, pMutation, patience):
+def nsga_ii_optimization_with_label(data, label, MaxIt, nPop, pCrossover, pMutation, patience, log_file=None):
     nCrossover = int(round(pCrossover * nPop / 2) * 2)
     nMutation = int(round(pMutation * nPop))
     pop = [generate_random_solution(data) for _ in range(nPop)]
@@ -434,8 +444,14 @@ def nsga_ii_optimization_with_label(data, label, MaxIt, nPop, pCrossover, pMutat
     best_f1 = float('inf')
     best_f2 = float('inf')
 
+    start_time = time.time()
     for it in range(MaxIt):
-        print(f"Iteration {it+1}/{MaxIt}")
+        # Progress bar
+        progress = int((it + 1) / MaxIt * 50)
+        bar = '[' + '#' * progress + '-' * (50 - progress) + ']'
+        print(f"\r{bar} Iteration {it+1}/{MaxIt}", end='', flush=True)
+
+        log_with_timestamp(f"Iteration {it+1}/{MaxIt} started.", log_file)
         pop, F = non_dominated_sorting(pop)
         pop = calculate_crowding_distance(pop, F)
         popc = []
@@ -473,9 +489,9 @@ def nsga_ii_optimization_with_label(data, label, MaxIt, nPop, pCrossover, pMutat
             remaining_slots = nPop - len(new_pop)
             new_pop.extend(F_k[:remaining_slots])
         plot_pareto_fronts_with_parents(F_combined, new_pop, it+1, label)
-        print(f"Iteration {it+1}: Pareto front size = {len(F_combined[0])}")
+        log_with_timestamp(f"Iteration {it+1}: Pareto front size = {len(F_combined[0])}", log_file)
         for ind in F_combined[0]:
-            print(f"Iteration {it+1}: Cost = {ind.Cost}")
+            log_with_timestamp(f"Iteration {it+1}: Cost = {ind.Cost}", log_file)
         all_fronts.append(F_combined[0])
         # --- Collect skyline stats ---
         costs = np.array([ind.Cost for ind in F_combined[0]])
@@ -500,10 +516,14 @@ def nsga_ii_optimization_with_label(data, label, MaxIt, nPop, pCrossover, pMutat
         else:
             no_improve_count += 1
         if no_improve_count >= patience:
-            print(f"Early stopping: No improvement for {patience} generations.")
+            log_with_timestamp(f"Early stopping: No improvement for {patience} generations.", log_file)
             break
 
         pop = new_pop
+    print()  # For newline after progress bar
+    end_time = time.time()
+    elapsed = end_time - start_time
+    log_with_timestamp(f"NSGA-II optimization completed in {elapsed:.2f} seconds.", log_file)
     pop, F_final = non_dominated_sorting(pop)
     pop = calculate_crowding_distance(pop, F_final)
     return F_final[0], data, all_fronts, evolution_stats
@@ -1004,7 +1024,7 @@ def run_and_plot_nsga(data, label, candidate_610=None, candidate_955=None, retur
                       MaxIt=200, nPop=80, pCrossover=0.7, pMutation=0.15, patience=20):
     print(f"\n--- Running NSGA-II ({label}) ---")
     pareto_front, data, all_fronts, evolution_stats = nsga_ii_optimization_with_label(
-        data, label, MaxIt, nPop, pCrossover, pMutation, patience)
+        data, label, MaxIt, nPop, pCrossover, pMutation, patience, log_file=f'output/nsga_log_{label}.txt')
     plot_pareto_front(pareto_front, label)
     plot_pareto_evolution(all_fronts, label)
     plot_objective_evolution(evolution_stats, label, objective_idx=0)
@@ -1113,8 +1133,8 @@ def main():
         f.write("NSGA-II Supply Chain Optimization Log\n")
 
     # Set NSGA-II parameters once
-    MaxIt = 12 # Recommended value from 150 to 300
-    nPop = 7 # Recommended value from 50 to 100
+    MaxIt = 10 # Recommended value from 150 to 300
+    nPop = 10 # Recommended value from 50 to 100
     pCrossover = 0.7
     pMutation = 0.15
     patience = 20
