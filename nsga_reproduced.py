@@ -2,14 +2,39 @@ import numpy as np
 import random
 import math
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 import pandas as pd
 import os
+import sys
+import pickle
+import hashlib
+import json
+
+def cache_exists(cache_file):
+    return os.path.exists(cache_file)
+
+def save_cache(obj, cache_file):
+    with open(cache_file, 'wb') as f:
+        pickle.dump(obj, f)
+
+def load_cache(cache_file):
+    with open(cache_file, 'rb') as f:
+        return pickle.load(f)
+def get_param_hash(data, MaxIt, nPop, pCrossover, pMutation, patience):
+    param_keys = ['n_candidate', 'n_community', 'Q', 'C', 'Cp', 'Cpp', 'alpha', 'beta', 'U', 'D', 'lambda_']
+    param_dict = {k: (data[k].tolist() if isinstance(data[k], np.ndarray) else data[k]) for k in param_keys if k in data}
+    param_dict['MaxIt'] = MaxIt
+    param_dict['nPop'] = nPop
+    param_dict['pCrossover'] = pCrossover
+    param_dict['pMutation'] = pMutation
+    param_dict['patience'] = patience
+    param_str = json.dumps(param_dict, sort_keys=True)
+    return hashlib.md5(param_str.encode('utf-8')).hexdigest()
+
 
 # --- Global Data Setup (Converted from initial_data.m, demand_data.m, coordinate_data.m) ---
-
-# ...existing code...
-
-def initialize_data(candidate_file):
+# Update initialize_data to accept Em and xy_community as arguments
+def initialize_data(candidate_file, Em, xy_community):
     # Parameters from initial_data.m
     n_community = 27
     Q = np.array([30, 40, 50])  # Capacity options
@@ -20,24 +45,18 @@ def initialize_data(candidate_file):
     beta = 1
     U = 25   # Fixed number of facilities to open
     D = 200  # Minimum distance constraint between facilities
-    landa = 0.5 # Fuzzy parameter
+    lambda_ = 0.5 # Fuzzy parameter
 
-    # Load demand data (communities) from Excel
-    demand_df = pd.read_excel("data/demand_data.xlsx")
-    Em = np.array(demand_df["demand"]).reshape(-1, 1)  # Assuming column is named 'demand'
-
+    # Calculate E_L, E_U based on Em
     Ep = 0.6 * Em
     Eo = 1.4 * Em
-    E_L = (landa / 2 * (Em + Eo) / 2) + ((1 - landa / 2) * (Ep + Em) / 2)
-    E_U = ((1 - landa / 2) * (Em + Eo) / 2) + (landa / 2 * (Ep + Em) / 2)
+    E_L = (lambda_ / 2 * (Em + Eo) / 2) + ((1 - lambda_ / 2) * (Ep + Em) / 2)
+    E_U = ((1 - lambda_ / 2) * (Em + Eo) / 2) + (lambda_ / 2 * (Ep + Em) / 2)
 
     # Load candidate locations from Excel
     candidate_df = pd.read_excel(candidate_file)
     xy_candidate = candidate_df[["x", "y"]].values
     n_candidate = xy_candidate.shape[0]
-
-    # Load community locations from demand_data.xlsx (assuming columns 'x', 'y')
-    xy_community = demand_df[["x", "y"]].values
 
     # Calculate dpp (distance between candidates)
     dpp = np.linalg.norm(xy_candidate[:, None, :] - xy_candidate[None, :, :], axis=2)
@@ -49,7 +68,7 @@ def initialize_data(candidate_file):
 
     data = {
         'n_candidate': n_candidate, 'n_community': n_community, 'Q': Q, 'C': C, 'Cp': Cp, 'Cpp': Cpp,
-        'alpha': alpha, 'beta': beta, 'U': U, 'D': D, 'landa': landa, 'E_L': E_L, 'E_U': E_U,
+        'alpha': alpha, 'beta': beta, 'U': U, 'D': D, 'lambda_': lambda_, 'E_L': E_L, 'E_U': E_U,
         'dpp': dpp, 'd': d, 'gama': gama, 'xy_candidate': xy_candidate, 'xy_community': xy_community
     }
     return data
@@ -401,15 +420,16 @@ def mutate(p_x, data):
 
 # --- Main NSGA-II Loop ---
 
-def nsga_ii_optimization_with_label(data, label):
-    MaxIt = 10
-    nPop = 10
-    pCrossover = 0.7
-    pMutation = 0.15
+def nsga_ii_optimization_with_label(data, label, MaxIt, nPop, pCrossover, pMutation, patience):
     nCrossover = int(round(pCrossover * nPop / 2) * 2)
     nMutation = int(round(pMutation * nPop))
     pop = [generate_random_solution(data) for _ in range(nPop)]
-    all_fronts = []  # <-- Store Pareto fronts here
+    all_fronts = []
+    evolution_stats = {'cost': [], 'stddev': [], 'balanced': []}
+    no_improve_count = 0
+    best_f1 = float('inf')
+    best_f2 = float('inf')
+
     for it in range(MaxIt):
         print(f"Iteration {it+1}/{MaxIt}")
         pop, F = non_dominated_sorting(pop)
@@ -449,11 +469,41 @@ def nsga_ii_optimization_with_label(data, label):
             remaining_slots = nPop - len(new_pop)
             new_pop.extend(F_k[:remaining_slots])
         plot_pareto_fronts_with_parents(F_combined, new_pop, it+1, label)
-        all_fronts.append(F_combined[0])  # <-- Store the best Pareto front for this iteration
+        print(f"Iteration {it+1}: Pareto front size = {len(F_combined[0])}")
+        for ind in F_combined[0]:
+            print(f"Iteration {it+1}: Cost = {ind.Cost}")
+        all_fronts.append(F_combined[0])
+        # --- Collect skyline stats ---
+        costs = np.array([ind.Cost for ind in F_combined[0]])
+        min_cost_idx = np.argmin(costs[:, 0])
+        min_stddev_idx = np.argmin(costs[:, 1])
+        f1 = costs[:, 0]
+        f2 = costs[:, 1]
+        f1_norm = (f1 - f1.min()) / (f1.max() - f1.min() + 1e-8)
+        f2_norm = (f2 - f2.min()) / (f2.max() - f2.min() + 1e-8)
+        balanced_idx = np.argmin(np.abs(f1_norm - f2_norm))
+        evolution_stats['cost'].append(costs[min_cost_idx])
+        evolution_stats['stddev'].append(costs[min_stddev_idx])
+        evolution_stats['balanced'].append(costs[balanced_idx])
+
+        # --- Early stopping check ---
+        current_best_f1 = np.min(costs[:, 0])
+        current_best_f2 = np.min(costs[:, 1])
+        if current_best_f1 < best_f1 or current_best_f2 < best_f2:
+            best_f1 = min(best_f1, current_best_f1)
+            best_f2 = min(best_f2, current_best_f2)
+            no_improve_count = 0
+        else:
+            no_improve_count += 1
+        if no_improve_count >= patience:
+            print(f"Early stopping: No improvement for {patience} generations.")
+            break
+
         pop = new_pop
     pop, F_final = non_dominated_sorting(pop)
     pop = calculate_crowding_distance(pop, F_final)
-    return F_final[0], data, all_fronts
+    return F_final[0], data, all_fronts, evolution_stats
+
 '''
 def nsga_ii_optimization(data):
     # Parameters
@@ -606,13 +656,21 @@ def plot_spatial_solution(best_solution, data, label="", candidate_610=None, can
 
     plt.figure(figsize=(10, 8))
 
-    # Plot all candidate locations as background crosses
-    if candidate_610 is not None:
+    # Only plot candidates for the current label
+    if "610" in label and candidate_610 is not None:
         plt.scatter(candidate_610[:, 0], candidate_610[:, 1], 
-                    marker='x', s=30, color='yellow', alpha=0.3, label='610 Candidates')
-    if candidate_955 is not None:
+                    marker='x', s=30, color='green', alpha=0.3, label='610 Candidates')
+    elif "955" in label and candidate_955 is not None:
         plt.scatter(candidate_955[:, 0], candidate_955[:, 1], 
                     marker='x', s=30, color='red', alpha=0.3, label='955 Candidates')
+    else:
+        # For baseline or other labels, show both
+        if candidate_610 is not None:
+            plt.scatter(candidate_610[:, 0], candidate_610[:, 1], 
+                        marker='x', s=30, color='green', alpha=0.3, label='610 Candidates')
+        if candidate_955 is not None:
+            plt.scatter(candidate_955[:, 0], candidate_955[:, 1], 
+                        marker='x', s=30, color='red', alpha=0.3, label='955 Candidates')
 
     # Plot community demand bubbles
     Em_norm = data['E_L'].mean()
@@ -647,25 +705,37 @@ def plot_spatial_solution(best_solution, data, label="", candidate_610=None, can
 def plot_pareto_evolution(all_fronts, label=""):
     """
     Plot all points from the best Pareto front of each iteration.
-    Older fronts are lighter, newer fronts are darker.
+    Show only 5 colors for legend: first, 1/4, middle, 3/4, last iteration.
     """
     output_dir = ensure_output_dir()
     plt.figure(figsize=(8, 6))
     n_iters = len(all_fronts)
-    base_color = np.array([0.1, 0.5, 0.8])  # blueish
-    for i, front in enumerate(all_fronts):
+    cmap = plt.colormaps.get_cmap('coolwarm')
+    # Indices for legend: first, 1/4, middle, 3/4, last
+    legend_idxs = [0, n_iters//4, n_iters//2, 3*n_iters//4, n_iters-1]
+    legend_idxs = sorted(set([i for i in legend_idxs if i < n_iters]))
+    handles = []
+    labels = []
+    # Plot all iterations, but only label the selected ones
+    for i in reversed(range(n_iters)):
+        front = all_fronts[i]
         if not front:
             continue
         costs = np.array([ind.Cost for ind in front])
-        # Fade color for earlier iterations
-        alpha = 0.2 + 0.8 * (i + 1) / n_iters
-        color = base_color * alpha + (1 - alpha)
-        plt.scatter(costs[:, 0], costs[:, 1], color=color, alpha=alpha, s=40, label=f'Iter {i+1}' if i in [0, n_iters-1] else None)
-        # If you want to connect nearest neighbors within each front, you can use scipy.spatial for Delaunay or MST, but it's not standard for Pareto plots.
+        color = cmap(i / max(n_iters - 1, 1))
+        legend_label = None
+        if i in legend_idxs:
+            legend_label = f'Iter {i+1}'
+        sc = plt.scatter(costs[:, 0], costs[:, 1], color=color, alpha=0.7, s=30, label=legend_label)
+        if legend_label:
+            handles.append(sc)
+            labels.append(legend_label)
     plt.title(f"Pareto Front Evolution ({label})")
     plt.xlabel("Objective 1: Total Cost ($f_1$)")
     plt.ylabel("Objective 2: Standard Deviation ($f_2$, Equity)")
     plt.grid(True)
+    if handles:
+        plt.legend(handles, labels, title="Iteration", loc="best")
     plt.savefig(os.path.join(output_dir, f'pareto_evolution_{label}.png'))
     plt.close()
 
@@ -685,6 +755,50 @@ def plot_final_pareto_comparison(pareto_610, pareto_955):
     plt.legend()
     plt.grid(True)
     plt.savefig(os.path.join(output_dir, 'pareto_final_comparison.png'))
+    plt.close()
+
+def plot_all_candidates_with_demand(candidate_610, candidate_955, xy_community, E_L):
+    output_dir = ensure_output_dir()
+    plt.figure(figsize=(10, 8))
+    # Plot 610 candidates as green crosses
+    plt.scatter(candidate_610[:, 0], candidate_610[:, 1], marker='x', s=30, color='green', alpha=0.3, label='610 Candidates')
+    # Plot 955 candidates as red crosses
+    plt.scatter(candidate_955[:, 0], candidate_955[:, 1], marker='x', s=30, color='red', alpha=0.3, label='955 Candidates')
+    # Plot community demand bubbles
+    Em_norm = E_L.mean()
+    bubble_sizes = E_L.flatten() / Em_norm * 500 
+    plt.scatter(xy_community[:, 0], xy_community[:, 1], 
+                s=bubble_sizes, color='gray', alpha=0.3, label='Community Demand (Size=Demand)')
+    plt.title("All Candidate Locations and Community Demands")
+    plt.xlabel("X-Coordinate")
+    plt.ylabel("Y-Coordinate")
+    plt.legend(scatterpoints=1)
+    plt.grid(True, alpha=0.5)
+    plt.savefig(os.path.join(output_dir, 'all_candidates_with_demand.png'))
+    plt.close()
+
+def plot_objective_evolution(evolution_stats, label="", objective_idx=0):
+    """
+    Plot the evolution of the tracked solutions for a single objective over iterations.
+    objective_idx: 0 for cost, 1 for stddev/equity
+    """
+    output_dir = ensure_output_dir()
+    plt.figure(figsize=(8, 6))
+    iterations = np.arange(1, len(evolution_stats['cost']) + 1)
+    obj_name = "Total Cost ($f_1$)" if objective_idx == 0 else "Standard Deviation ($f_2$, Equity)"
+    # Plot cost-optimized
+    plt.plot(iterations, [v[objective_idx] for v in evolution_stats['cost']], 'b-', marker='o', label='Min Cost')
+    # Plot stddev-optimized
+    plt.plot(iterations, [v[objective_idx] for v in evolution_stats['stddev']], 'r-', marker='s', label='Min Stddev')
+    # Plot balanced
+    plt.plot(iterations, [v[objective_idx] for v in evolution_stats['balanced']], 'g-', marker='^', label='Balanced')
+    plt.xlabel("Iteration")
+    plt.ylabel(obj_name)
+    plt.title(f"Pareto Objective Evolution ({label}) - {obj_name}")
+    plt.legend()
+    plt.grid(True)
+    fname = f'pareto_evolution_obj{objective_idx+1}_{label}.png'
+    plt.savefig(os.path.join(output_dir, fname))
     plt.close()
 
 # --- Evaluation ---
@@ -718,10 +832,10 @@ def baseline_solution(data):
 
     return Individual(x=x, E=E, y=y, Cost=cost)
 
-def run_and_plot_baseline(data, label):
+def run_and_plot_baseline(data, label, candidate_610=None, candidate_955=None):
     print(f"\n--- Running Baseline ({label}) ---")
     sol = baseline_solution(data)
-    plot_spatial_solution(sol, data, label)
+    plot_spatial_solution(sol, data, label, candidate_610=candidate_610, candidate_955=candidate_955)
     print(f"Saved Baseline spatial plot for {label} to spatial_solution_{label}.png")
     if sol.Cost is not None:
         print(f"Baseline cost: {sol.Cost[0]:.2f}, equity stddev: {sol.Cost[1]:.2f}")
@@ -729,27 +843,162 @@ def run_and_plot_baseline(data, label):
         print("Baseline cost or equity stddev is not available (Cost is None).")
     return sol
 
-def run_and_plot_nsga(data, label):
+def export_allocation_summary(solution, data, label):
+    output_dir = ensure_output_dir()
+    Q = data['Q']
+    y = solution.y
+    x = solution.x
+    n_candidate, n_types = x.shape
+    n_community = data['n_community']
+
+    rows = []
+    for i in range(n_candidate):
+        if np.any(x[i, :]):
+            nh_type = np.argmax(x[i, :]) + 1
+            capacity = Q[nh_type - 1]
+            allocated_comms = []
+            allocated_people = []
+            for j in range(n_community):
+                if y[i, j] > 0:
+                    allocated_comms.append(str(j + 1))  # 1-based index for communities
+                    allocated_people.append(str(int(y[i, j])))
+            if allocated_comms:
+                rows.append({
+                    "Location": i + 1,  # 1-based index for location
+                    "Nursing Home Type": nh_type,
+                    "Capacity": capacity,
+                    "Allocated communities": ",".join(allocated_comms),
+                    "The Number of Allocated People": ",".join(allocated_people)
+                })
+
+    df = pd.DataFrame(rows, columns=[
+        "Location", "Nursing Home Type", "Capacity",
+        "Allocated communities", "The Number of Allocated People"
+    ])
+    # Save to CSV, TXT, and Excel
+    df.to_csv(os.path.join(output_dir, f"allocation_summary_{label}.csv"), index=False)
+    df.to_csv(os.path.join(output_dir, f"allocation_summary_{label}.txt"), sep='\t', index=False)
+    df.to_excel(os.path.join(output_dir, f"allocation_summary_{label}.xlsx"), index=False)
+    print(f"Saved allocation summary for {label} to allocation_summary_{label}.csv, .txt, and .xlsx")
+    print(df.head(10).to_string(index=False))  # Print preview
+
+def run_and_plot_nsga(data, label, candidate_610=None, candidate_955=None, return_front=False,
+                      MaxIt=200, nPop=80, pCrossover=0.7, pMutation=0.15, patience=20):
     print(f"\n--- Running NSGA-II ({label}) ---")
-    pareto_front, data, all_fronts = nsga_ii_optimization_with_label(data, label)
+    pareto_front, data, all_fronts, evolution_stats = nsga_ii_optimization_with_label(
+        data, label, MaxIt, nPop, pCrossover, pMutation, patience)
     plot_pareto_front(pareto_front, label)
     plot_pareto_evolution(all_fronts, label)
+    plot_objective_evolution(evolution_stats, label, objective_idx=0)
+    plot_objective_evolution(evolution_stats, label, objective_idx=1)
     costs = np.array([ind.Cost for ind in pareto_front])
     min_cost_idx = np.argmin(costs[:, 0])
     best_solution = pareto_front[min_cost_idx]
-    plot_spatial_solution(best_solution, data, label)
+    plot_spatial_solution(best_solution, data, label, candidate_610=candidate_610, candidate_955=candidate_955)
     print(f"Saved NSGA-II spatial plot for {label} to spatial_solution_{label}.png")
     print(f"NSGA-II best cost: {best_solution.Cost[0]:.2f}, equity stddev: {best_solution.Cost[1]:.2f}")
+    export_allocation_summary(best_solution, data, label)
+    if return_front:
+        return pareto_front
     return best_solution
 
+def show_parameters(data, label, log_file=None):
+    """
+    Print and optionally log the main parameters for a candidate set.
+    """
+    params = [
+        f"--- Parameters for {label} ---",
+        f"Number of Candidates: {data['n_candidate']}",
+        f"Number of Communities: {data['n_community']}",
+        f"Capacity Options (Q): {data['Q']}",
+        f"Construction Costs (C): {data['C']}",
+        f"Travel Cost per Unit (Cp): {data['Cp']}",
+        f"Penalty Cost (Cpp): {data['Cpp']}",
+        f"Alpha: {data['alpha']}",
+        f"Beta: {data['beta']}",
+        f"Number of Facilities to Open (U): {data['U']}",
+        f"Minimum Distance Constraint (D): {data['D']}",
+        f"Fuzzy Parameter (lambda): {data['lambda_']}",
+        f"Lower Bound Demand (E_L): {np.round(data['E_L'].flatten(), 2)}",
+        f"Upper Bound Demand (E_U): {np.round(data['E_U'].flatten(), 2)}",
+        "-----------------------------"
+    ]
+    for line in params:
+        print(line)
+        if log_file is not None:
+            with open(log_file, "a") as f:
+                f.write(line + "\n")
 
 def main():
-    data_610 = initialize_data("data/candidate_location_610.xlsx")
-    data_955 = initialize_data("data/candidate_location_955.xlsx")
-    run_and_plot_baseline(data_610, "baseline_610")
-    run_and_plot_nsga(data_610, "nsga_610")
-    run_and_plot_baseline(data_955, "baseline_955")
-    run_and_plot_nsga(data_955, "nsga_955")
+    # Prepare log file
+    log_file = "output/console_log.txt"
+    if not os.path.exists("output"):
+        os.makedirs("output")
+    with open(log_file, "w") as f:
+        f.write("NSGA-II Supply Chain Optimization Log\n")
+
+    # Set NSGA-II parameters once
+    MaxIt = 200 # Recommended value from 150 to 300
+    nPop = 80 # Recommended value from 50 to 100
+    pCrossover = 0.7
+    pMutation = 0.15
+    patience = 20
+
+    # Load demand data once
+    demand_df = pd.read_excel("data/demand_data.xlsx")
+    Em = np.array(demand_df["demand"]).reshape(-1, 1)
+    xy_community = demand_df[["x", "y"]].values
+
+    # Load candidate locations once
+    candidate_610 = np.array(pd.read_excel("data/candidate_location_610.xlsx")[["x", "y"]])
+    candidate_955 = np.array(pd.read_excel("data/candidate_location_955.xlsx")[["x", "y"]])
+
+    # Initialize data for each candidate set, passing demand info
+    data_610 = initialize_data("data/candidate_location_610.xlsx", Em, xy_community)
+    data_955 = initialize_data("data/candidate_location_955.xlsx", Em, xy_community)
+
+    # Show parameters before running
+    show_parameters(data_610, "610 Candidates", log_file)
+    show_parameters(data_955, "955 Candidates", log_file)
+    print(f"NSGA-II Parameters for 610 Candidates: MaxIt={MaxIt}, nPop={nPop}, pCrossover={pCrossover}, pMutation={pMutation}, patience={patience}")
+    if log_file is not None:
+        with open(log_file, "a") as f:
+            f.write(f"NSGA-II Parameters for 610 Candidates: MaxIt={MaxIt}, nPop={nPop}, pCrossover={pCrossover}, pMutation={pMutation}, patience={patience}\n")
+
+    # Plot all candidates with demand
+    E_L = data_610['E_L']  # or data_955['E_L'], they should be the same
+    plot_all_candidates_with_demand(candidate_610, candidate_955, xy_community, E_L)
+
+    # Run and plot baseline solutions
+    sys.stdout = open(log_file, "a")  # Redirect print to log file as well as console
+    run_and_plot_baseline(data_610, "baseline_610", candidate_610, candidate_955)
+    run_and_plot_baseline(data_955, "baseline_955", candidate_610, candidate_955)
+
+    # Create parameter hashes for cache filenames
+    param_hash_610 = get_param_hash(data_610, MaxIt, nPop, pCrossover, pMutation, patience)
+    param_hash_955 = get_param_hash(data_955, MaxIt, nPop, pCrossover, pMutation, patience)
+    cache_file_610 = f"output/nsga_610_cache_{param_hash_610}.pkl"
+    cache_file_955 = f"output/nsga_955_cache_{param_hash_955}.pkl"
+
+    if cache_exists(cache_file_610):
+        pareto_front_610 = load_cache(cache_file_610)
+    else:
+        pareto_front_610 = run_and_plot_nsga(data_610, "nsga_610", candidate_610, candidate_955, return_front=True,
+                                             MaxIt=MaxIt, nPop=nPop, pCrossover=pCrossover, pMutation=pMutation, patience=patience)
+        save_cache(pareto_front_610, cache_file_610)
+
+    if cache_exists(cache_file_955):
+        pareto_front_955 = load_cache(cache_file_955)
+    else:
+        pareto_front_955 = run_and_plot_nsga(data_955, "nsga_955", candidate_610, candidate_955, return_front=True,
+                                             MaxIt=MaxIt, nPop=nPop, pCrossover=pCrossover, pMutation=pMutation, patience=patience)
+        save_cache(pareto_front_955, cache_file_955)
+
+    plot_final_pareto_comparison(pareto_front_610, pareto_front_955)
+    export_final_solution_comparison(pareto_front_610, pareto_front_955)
+    plot_final_solution_comparison(pareto_front_610, pareto_front_955)
+
+    sys.stdout = sys.__stdout__  # Restore print to console
 
 if __name__ == "__main__":
     main()
