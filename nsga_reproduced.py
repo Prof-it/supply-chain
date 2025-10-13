@@ -9,6 +9,10 @@ import sys
 import pickle
 import hashlib
 import json
+import requests
+from PIL import Image
+from io import BytesIO
+
 
 def cache_exists(cache_file):
     return os.path.exists(cache_file)
@@ -597,6 +601,81 @@ def nsga_ii_optimization(data):
 '''
 
 
+
+
+# --- Geo conversion from Chinese to Western System ---
+def bd09_to_gcj02(bd_lon, bd_lat):
+    x = bd_lon - 0.0065
+    y = bd_lat - 0.006
+    z = math.sqrt(x * x + y * y) - 0.00002 * math.sin(y * math.pi)
+    theta = math.atan2(y, x) - 0.000003 * math.cos(x * math.pi)
+    gcj_lon = z * math.cos(theta)
+    gcj_lat = z * math.sin(theta)
+    return gcj_lon, gcj_lat
+
+def gcj02_to_wgs84(gcj_lon, gcj_lat):
+    # This is an approximate inverse transform for China (not perfect, but works for most cases)
+    # For more accurate conversion, use a dedicated library
+    def transform_lat(lon, lat):
+        ret = -100.0 + 2.0 * lon + 3.0 * lat + 0.2 * lat * lat + 0.1 * lon * lat + 0.2 * math.sqrt(abs(lon))
+        ret += (20.0 * math.sin(6.0 * lon * math.pi) + 20.0 * math.sin(2.0 * lon * math.pi)) * 2.0 / 3.0
+        ret += (20.0 * math.sin(lat * math.pi) + 40.0 * math.sin(lat / 3.0 * math.pi)) * 2.0 / 3.0
+        ret += (160.0 * math.sin(lat / 12.0 * math.pi) + 320 * math.sin(lat * math.pi / 30.0)) * 2.0 / 3.0
+        return ret
+
+    def transform_lon(lon, lat):
+        ret = 300.0 + lon + 2.0 * lat + 0.1 * lon * lon + 0.1 * lon * lat + 0.1 * math.sqrt(abs(lon))
+        ret += (20.0 * math.sin(6.0 * lon * math.pi) + 20.0 * math.sin(2.0 * lon * math.pi)) * 2.0 / 3.0
+        ret += (20.0 * math.sin(lon * math.pi) + 40.0 * math.sin(lon / 3.0 * math.pi)) * 2.0 / 3.0
+        ret += (150.0 * math.sin(lon / 12.0 * math.pi) + 300.0 * math.sin(lon / 30.0 * math.pi)) * 2.0 / 3.0
+        return ret
+
+    a = 6378245.0
+    ee = 0.00669342162296594323
+    d_lat = transform_lat(gcj_lon - 105.0, gcj_lat - 35.0)
+    d_lon = transform_lon(gcj_lon - 105.0, gcj_lat - 35.0)
+    rad_lat = gcj_lat / 180.0 * math.pi
+    magic = math.sin(rad_lat)
+    magic = 1 - ee * magic * magic
+    sqrt_magic = math.sqrt(magic)
+    d_lat = (d_lat * 180.0) / ((a * (1 - ee)) / (magic * sqrt_magic) * math.pi)
+    d_lon = (d_lon * 180.0) / (a / sqrt_magic * math.cos(rad_lat) * math.pi)
+    wgs_lat = gcj_lat - d_lat
+    wgs_lon = gcj_lon - d_lon
+    return wgs_lon, wgs_lat
+
+def bd09_to_wgs84(bd_lon, bd_lat):
+    gcj_lon, gcj_lat = bd09_to_gcj02(bd_lon, bd_lat)
+    return gcj02_to_wgs84(gcj_lon, gcj_lat)
+
+def convert_bd09_to_wgs84(xy):
+    # xy: numpy array of shape (n, 2), columns are [lon, lat] in BD-09
+    return np.array([bd09_to_wgs84(lon, lat) for lon, lat in xy])
+
+def get_bounding_box(xy_candidate, xy_community, margin=0.01):
+    # Combine all coordinates
+    all_x = np.concatenate([xy_candidate[:, 0], xy_community[:, 0]])
+    all_y = np.concatenate([xy_candidate[:, 1], xy_community[:, 1]])
+    min_x, max_x = all_x.min(), all_x.max()
+    min_y, max_y = all_y.min(), all_y.max()
+    # Add margin
+    min_x -= margin
+    max_x += margin
+    min_y -= margin
+    max_y += margin
+    return min_x, max_x, min_y, max_y
+
+def fetch_osm_static_map(min_x, max_x, min_y, max_y, width=800, height=600):
+    # Use center of bounding box for map center
+    center_x = (min_x + max_x) / 2
+    center_y = (min_y + max_y) / 2
+    # OSM static map API (zoom is fixed, you can adjust if needed)
+    url = f"https://staticmap.openstreetmap.de/staticmap.php?center={center_y},{center_x}&zoom=12&size={width}x{height}&maptype=mapnik"
+    response = requests.get(url)
+    img = Image.open(BytesIO(response.content))
+    return img
+
+
 # --- Plotting Functions ---
 
 def ensure_output_dir():
@@ -756,6 +835,45 @@ def plot_final_pareto_comparison(pareto_610, pareto_955):
     plt.grid(True)
     plt.savefig(os.path.join(output_dir, 'pareto_final_comparison.png'))
     plt.close()
+
+def export_final_solution_comparison(pareto_610, pareto_955):
+    """
+    Export a summary comparison of the best solutions from both Pareto fronts to CSV and TXT.
+    """
+    output_dir = ensure_output_dir()
+    # Find best (min cost) and best (min stddev) for each
+    def get_best_solutions(pareto_front):
+        costs = np.array([ind.Cost for ind in pareto_front])
+        min_cost_idx = np.argmin(costs[:, 0])
+        min_stddev_idx = np.argmin(costs[:, 1])
+        balanced_idx = np.argmin(np.abs((costs[:, 0] - costs[:, 0].min()) / (costs[:, 0].max() - costs[:, 0].min() + 1e-8) -
+                                        (costs[:, 1] - costs[:, 1].min()) / (costs[:, 1].max() - costs[:, 1].min() + 1e-8)))
+        return [pareto_front[min_cost_idx], pareto_front[min_stddev_idx], pareto_front[balanced_idx]]
+
+    best_610 = get_best_solutions(pareto_610)
+    best_955 = get_best_solutions(pareto_955)
+
+    rows = []
+    labels = ["Min Cost", "Min Stddev", "Balanced"]
+    for i, sol in enumerate(best_610):
+        rows.append({
+            "Candidate Set": "610",
+            "Type": labels[i],
+            "Total Cost": sol.Cost[0],
+            "Stddev (Equity)": sol.Cost[1]
+        })
+    for i, sol in enumerate(best_955):
+        rows.append({
+            "Candidate Set": "955",
+            "Type": labels[i],
+            "Total Cost": sol.Cost[0],
+            "Stddev (Equity)": sol.Cost[1]
+        })
+    df = pd.DataFrame(rows)
+    df.to_csv(os.path.join(output_dir, "final_solution_comparison.csv"), index=False)
+    df.to_csv(os.path.join(output_dir, "final_solution_comparison.txt"), sep='\t', index=False)
+    print("Saved final solution comparison to final_solution_comparison.csv and .txt")
+    print(df.to_string(index=False))
 
 def plot_all_candidates_with_demand(candidate_610, candidate_955, xy_community, E_L):
     output_dir = ensure_output_dir()
@@ -929,6 +1047,63 @@ def show_parameters(data, label, log_file=None):
             with open(log_file, "a") as f:
                 f.write(line + "\n")
 
+def plot_final_solution_comparison(pareto_610, pareto_955, label_610="610", label_955="955"):
+    output_dir = ensure_output_dir()
+    plt.figure(figsize=(8, 6))
+
+    cost_scale = 1e6  # Scale cost to millions
+
+    # Get and scale costs for 610
+    costs_610 = np.array([ind.Cost for ind in pareto_610])
+    costs_610_scaled = costs_610.copy()
+    costs_610_scaled[:, 0] = costs_610_scaled[:, 0] / cost_scale
+    min_cost_idx_610 = np.argmin(costs_610_scaled[:, 0])
+    min_stddev_idx_610 = np.argmin(costs_610_scaled[:, 1])
+    rand_idx_610 = np.random.randint(len(costs_610_scaled))
+    points_610 = [
+        (costs_610_scaled[min_cost_idx_610], f"{label_610} Min Cost"),
+        (costs_610_scaled[min_stddev_idx_610], f"{label_610} Min Stddev"),
+        (costs_610_scaled[rand_idx_610], f"{label_610} Random")
+    ]
+
+    # Get and scale costs for 955
+    costs_955 = np.array([ind.Cost for ind in pareto_955])
+    costs_955_scaled = costs_955.copy()
+    costs_955_scaled[:, 0] = costs_955_scaled[:, 0] / cost_scale
+    min_cost_idx_955 = np.argmin(costs_955_scaled[:, 0])
+    min_stddev_idx_955 = np.argmin(costs_955_scaled[:, 1])
+    rand_idx_955 = np.random.randint(len(costs_955_scaled))
+    points_955 = [
+        (costs_955_scaled[min_cost_idx_955], f"{label_955} Min Cost"),
+        (costs_955_scaled[min_stddev_idx_955], f"{label_955} Min Stddev"),
+        (costs_955_scaled[rand_idx_955], f"{label_955} Random")
+    ]
+
+    # Plot and annotate with fixed offsets and rounded values
+    colors = ['blue', 'green', 'black']
+    markers = ['o', 's', '^']
+    offsets = [(-60, 0), (-30, -15), (10, 15)]  # blue middle left, green bottom middle, black offset is top right
+
+    for i, (pt, name) in enumerate(points_610):
+        plt.scatter(pt[0], pt[1], color=colors[i], marker=markers[i], s=120, label=name)
+        plt.annotate(f"{pt[0]:.2f}, {pt[1]:.2f}", (pt[0], pt[1]),
+                     textcoords="offset points", xytext=offsets[i], fontsize=8, color=colors[i],
+                     bbox=dict(boxstyle="round,pad=0.2", fc="white", alpha=0.7))
+
+    for i, (pt, name) in enumerate(points_955):
+        plt.scatter(pt[0], pt[1], color=colors[i], marker=markers[i], s=120, label=name)
+        plt.annotate(f"{pt[0]:.2f}, {pt[1]:.2f}", (pt[0], pt[1]),
+                     textcoords="offset points", xytext=offsets[i], fontsize=8, color=colors[i],
+                     bbox=dict(boxstyle="round,pad=0.2", fc="white", alpha=0.7))
+
+    plt.title("Final Solution Comparison: 610 vs 955")
+    plt.xlabel("Objective 1: Total Cost ($f_1$) [Millions]")
+    plt.ylabel("Objective 2: Standard Deviation ($f_2$, Equity)")
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(os.path.join(output_dir, 'final_solution_comparison.png'))
+    plt.close()
+
 def main():
     # Prepare log file
     log_file = "output/console_log.txt"
@@ -938,8 +1113,8 @@ def main():
         f.write("NSGA-II Supply Chain Optimization Log\n")
 
     # Set NSGA-II parameters once
-    MaxIt = 200 # Recommended value from 150 to 300
-    nPop = 80 # Recommended value from 50 to 100
+    MaxIt = 12 # Recommended value from 150 to 300
+    nPop = 7 # Recommended value from 50 to 100
     pCrossover = 0.7
     pMutation = 0.15
     patience = 20
@@ -996,7 +1171,7 @@ def main():
 
     plot_final_pareto_comparison(pareto_front_610, pareto_front_955)
     export_final_solution_comparison(pareto_front_610, pareto_front_955)
-    plot_final_solution_comparison(pareto_front_610, pareto_front_955)
+    plot_final_solution_comparison(pareto_front_610, pareto_front_955, label_610="610", label_955="955")
 
     sys.stdout = sys.__stdout__  # Restore print to console
 
