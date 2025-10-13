@@ -10,7 +10,7 @@ Two case studies are included:
 
 The **Shanghai dataset** originates from the paper:
 
-> *An intelligent multi-objective optimization for the location-allocation problem of urban nursing centers*  
+> *Efficient methods for a bi-objective nursing home location and allocation problem: A case study*  
 > *Applied Soft Computing*, 2018  
 > DOI: [10.1016/j.asoc.2018.01.014](https://doi.org/10.1016/j.asoc.2018.01.014)  
 > Dataset: [http://pan.baidu.com/s/1kUFD3wV](http://pan.baidu.com/s/1kUFD3wV)
