@@ -130,8 +130,7 @@ This will open a new browser window with the interactive map interface.
 3. Run the script:
 
 ```bash
- python nsga_reproduced.py | tail -f output/console_log.txt
-```
+ python nsga_reproduced.py
 
 ## Optional Extensions
 
