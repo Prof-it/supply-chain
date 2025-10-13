@@ -4,4 +4,4 @@ numpy
 pandas
 matplotlib
 pymoo
-openpyxl
+requests

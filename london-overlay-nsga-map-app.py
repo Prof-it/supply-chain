@@ -171,7 +171,6 @@ with col1:
     st.pydeck_chart(pdk.Deck(
         layers=[layer_patients, layer_candidates_single],
         initial_view_state=view_state,
-        tooltip={"text": "Location: [{lat}, {lon}]"},
         map_style="light"
     ))
 
@@ -180,10 +179,8 @@ with col2:
     st.pydeck_chart(pdk.Deck(
         layers=[layer_patients, layer_candidates_multi],
         initial_view_state=view_state,
-        tooltip={"text": "Location: [{lat}, {lon}]"},
         map_style="light"
     ))
-
 st.markdown("""
 ### Model Details:
 - Patients are randomly distributed over London.

@@ -2,18 +2,19 @@ import numpy as np
 import random
 import math
 import matplotlib.pyplot as plt
-import matplotlib.cm as cm
 import pandas as pd
 import os
-import sys
 import pickle
 import hashlib
 import json
-import requests
 from PIL import Image
 from io import BytesIO
+import matplotlib.image as mpimg
 import time
-
+import threading
+import multiprocessing
+import concurrent.futures
+import requests
 
 # --- Caching Functions ---
 def cache_exists(cache_file):
@@ -37,14 +38,49 @@ def get_param_hash(data, MaxIt, nPop, pCrossover, pMutation, patience):
     param_str = json.dumps(param_dict, sort_keys=True)
     return hashlib.md5(param_str.encode('utf-8')).hexdigest()
 
-# --- Logging Function ---
+def run_nsga_with_cache(args):
+    data, label, candidate_610, candidate_955, cache_file, MaxIt, nPop, pCrossover, pMutation, patience, map_path = args
+    if cache_exists(cache_file):
+        return load_cache(cache_file)
+    else:
+        result = run_and_plot_nsga(data, label, candidate_610, candidate_955, return_front=True,
+                                   MaxIt=MaxIt, nPop=nPop, pCrossover=pCrossover, pMutation=pMutation, patience=patience, map_path=map_path)
+        save_cache(result, cache_file)
+        return result
+
+# --- Logging and monitoring Function ---
 def log_with_timestamp(message, log_file=None):
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
     msg = f"[{timestamp}] {message}"
-    print(msg)
     if log_file is not None:
         with open(log_file, "a") as f:
             f.write(msg + "\n")
+def monitor_progress(labels, MaxIt, interval=2):
+    last_progress = {label: -1 for label in labels}
+    while True:
+        bars = []
+        all_done = True
+        changed = False
+        for label in labels:
+            progress_file = f"output/nsga_progress_{label}.txt"
+            try:
+                with open(progress_file, "r") as f:
+                    it = int(f.read().strip())
+            except Exception:
+                it = 0
+            bar = f"{label}: [{('#' * it).ljust(MaxIt)}] {it}/{MaxIt}"
+            bars.append(bar)
+            if it < MaxIt:
+                all_done = False
+            if last_progress[label] != it:
+                changed = True
+                last_progress[label] = it
+        if changed:
+            print("\r" + " | ".join(bars), end="", flush=True)
+        if all_done:
+            break
+        time.sleep(interval)
+    print()  # Newline after done
 
 # --- Global Data Setup (Converted from initial_data.m, demand_data.m, coordinate_data.m) ---
 # Update initialize_data to accept Em and xy_community as arguments
@@ -169,7 +205,7 @@ def greedy_allocation(x, E, Q, d):
     return y
 
 # --- Objective Function ---
-
+'''
 def objective_function(x, y, E, C, Cp, Cpp, d, gama):
     n_candidate, n_types = x.shape
     
@@ -198,6 +234,19 @@ def objective_function(x, y, E, C, Cp, Cpp, d, gama):
     else:
         f2 = 0
         
+    return np.array([f1, f2])
+'''
+def objective_function(x, y, E, C, Cp, Cpp, d, gama):
+    n_candidate, n_types = x.shape
+    cost_build = np.sum(x * C)
+    cost_travel = np.sum(Cp * (d * y))
+    cost_penalty = np.sum(Cpp * (gama * y))
+    f1 = cost_build + cost_travel + cost_penalty
+
+    # Vectorized equity calculation
+    mask = y > 0
+    repeated_distances = np.repeat(d[mask], np.round(y[mask]).astype(int))
+    f2 = np.std(repeated_distances) if repeated_distances.size > 1 else 0
     return np.array([f1, f2])
 
 # --- NSGA-II Core Functions ---
@@ -433,6 +482,23 @@ def mutate(p_x, data):
     return p_x # Return unchanged if mutation failed to find a valid swap
 
 # --- Main NSGA-II Loop ---
+def crossover_worker(args):
+    p1, p2, data = args
+    x_new = crossover(p1, p2, data).x
+    E = (data['E_U'] - data['E_L']) * np.random.rand(data['n_community'], 1) + data['E_L']
+    E = np.floor(E)
+    y = greedy_allocation(x_new, E, data['Q'], data['d'])
+    cost = objective_function(x_new, y, E, data['C'], data['Cp'], data['Cpp'], data['d'], data['gama'])
+    return Individual(x=x_new, E=E, y=y, Cost=cost)
+
+def mutation_worker(args):
+    p, data = args
+    x_new = mutate(p.x, data)
+    E = (data['E_U'] - data['E_L']) * np.random.rand(data['n_community'], 1) + data['E_L']
+    E = np.floor(E)
+    y = greedy_allocation(x_new, E, data['Q'], data['d'])
+    cost = objective_function(x_new, y, E, data['C'], data['Cp'], data['Cpp'], data['d'], data['gama'])
+    return Individual(x=x_new, E=E, y=y, Cost=cost)
 
 def nsga_ii_optimization_with_label(data, label, MaxIt, nPop, pCrossover, pMutation, patience, log_file=None):
     nCrossover = int(round(pCrossover * nPop / 2) * 2)
@@ -447,34 +513,23 @@ def nsga_ii_optimization_with_label(data, label, MaxIt, nPop, pCrossover, pMutat
     start_time = time.time()
     for it in range(MaxIt):
         # Progress bar
-        progress = int((it + 1) / MaxIt * 50)
-        bar = '[' + '#' * progress + '-' * (50 - progress) + ']'
-        print(f"\r{bar} Iteration {it+1}/{MaxIt}", end='', flush=True)
+        #progress = int((it + 1) / MaxIt * 50)
+        #bar = '[' + '#' * progress + '-' * (50 - progress) + ']'
+        #print(f"\r{bar} Iteration {it+1}/{MaxIt}", end='', flush=True)
+        with open(f"output/nsga_progress_{label}.txt", "w") as f:
+            f.write(str(it + 1))
 
         log_with_timestamp(f"Iteration {it+1}/{MaxIt} started.", log_file)
         pop, F = non_dominated_sorting(pop)
         pop = calculate_crowding_distance(pop, F)
         popc = []
-        while len(popc) < nCrossover:
-            i1, i2 = random.sample(range(nPop), 2)
-            p1 = pop[i1]
-            p2 = pop[i2]
-            x_new = crossover(p1, p2, data).x
-            E = (data['E_U'] - data['E_L']) * np.random.rand(data['n_community'], 1) + data['E_L']
-            E = np.floor(E)
-            y = greedy_allocation(x_new, E, data['Q'], data['d'])
-            cost = objective_function(x_new, y, E, data['C'], data['Cp'], data['Cpp'], data['d'], data['gama'])
-            popc.append(Individual(x=x_new, E=E, y=y, Cost=cost))
-        popm = []
-        for _ in range(nMutation):
-            i1 = random.randint(0, nPop - 1)
-            p = pop[i1]
-            x_new = mutate(p.x, data)
-            E = (data['E_U'] - data['E_L']) * np.random.rand(data['n_community'], 1) + data['E_L']
-            E = np.floor(E)
-            y = greedy_allocation(x_new, E, data['Q'], data['d'])
-            cost = objective_function(x_new, y, E, data['C'], data['Cp'], data['Cpp'], data['d'], data['gama'])
-            popm.append(Individual(x=x_new, E=E, y=y, Cost=cost))
+                
+        with multiprocessing.Pool(processes=4) as pool:
+            crossover_args = [(pop[random.sample(range(nPop), 1)[0]], pop[random.sample(range(nPop), 1)[0]], data) for _ in range(nCrossover)]
+            popc = pool.map(crossover_worker, crossover_args)
+            mutation_args = [(pop[random.randint(0, nPop - 1)], data) for _ in range(nMutation)]
+            popm = pool.map(mutation_worker, mutation_args)
+
         pop_combined = pop + popc + popm
         pop_combined, F_combined = non_dominated_sorting(pop_combined)
         pop_combined = calculate_crowding_distance(pop_combined, F_combined)
@@ -672,17 +727,18 @@ def convert_bd09_to_wgs84(xy):
     # xy: numpy array of shape (n, 2), columns are [lon, lat] in BD-09
     return np.array([bd09_to_wgs84(lon, lat) for lon, lat in xy])
 
-def get_bounding_box(xy_candidate, xy_community, margin=0.01):
-    # Combine all coordinates
+def get_bounding_box(xy_candidate, xy_community, margin=0.05):
     all_x = np.concatenate([xy_candidate[:, 0], xy_community[:, 0]])
     all_y = np.concatenate([xy_candidate[:, 1], xy_community[:, 1]])
     min_x, max_x = all_x.min(), all_x.max()
     min_y, max_y = all_y.min(), all_y.max()
-    # Add margin
-    min_x -= margin
-    max_x += margin
-    min_y -= margin
-    max_y += margin
+    # Dynamic margin
+    x_margin = margin * (max_x - min_x)
+    y_margin = margin * (max_y - min_y)
+    min_x -= x_margin
+    max_x += x_margin
+    min_y -= y_margin
+    max_y += y_margin
     return min_x, max_x, min_y, max_y
 
 def fetch_osm_static_map(min_x, max_x, min_y, max_y, width=800, height=600):
@@ -742,7 +798,7 @@ def plot_pareto_front(pareto_front, label=""):
     plt.savefig(os.path.join(output_dir, f'pareto_front_{label}.png'))
     plt.close()
 
-def plot_spatial_solution(best_solution, data, label="", candidate_610=None, candidate_955=None):
+def plot_spatial_solution(best_solution, data, label="", candidate_610=None, candidate_955=None, map_path=None):
     output_dir = ensure_output_dir()
     xy_candidate = data['xy_candidate']
     xy_community = data['xy_community']
@@ -754,6 +810,18 @@ def plot_spatial_solution(best_solution, data, label="", candidate_610=None, can
     type_colors = ['#337AFF', '#FF9900', '#33CC33']  # blue, orange, green
 
     plt.figure(figsize=(10, 8))
+    ax = plt.gca()
+
+    # Calculate bounding box for extent
+    margin = 0.05
+    min_x, max_x, min_y, max_y = get_bounding_box(xy_candidate, xy_community, margin=margin)
+    ax.set_xlim(min_x, max_x)
+    ax.set_ylim(min_y, max_y)
+
+    # Add map background if map_path exists
+    if map_path is not None and os.path.exists(map_path):
+        static_img = mpimg.imread(map_path)
+        plt.imshow(static_img, extent=(min_x, max_x, min_y, max_y), aspect='auto', alpha=0.3)
 
     # Only plot candidates for the current label
     if "610" in label and candidate_610 is not None:
@@ -895,9 +963,21 @@ def export_final_solution_comparison(pareto_610, pareto_955):
     print("Saved final solution comparison to final_solution_comparison.csv and .txt")
     print(df.to_string(index=False))
 
-def plot_all_candidates_with_demand(candidate_610, candidate_955, xy_community, E_L):
+def plot_all_candidates_with_demand(candidate_610, candidate_955, xy_community, E_L, map_path=None):
     output_dir = ensure_output_dir()
     plt.figure(figsize=(10, 8))
+    ax = plt.gca()
+
+    # Calculate bounding box for extent
+    margin = 0.1
+    min_x, max_x, min_y, max_y = get_bounding_box(candidate_955, xy_community, margin=margin)
+    ax.set_xlim(min_x, max_x)
+    ax.set_ylim(min_y, max_y)
+
+    # Add map background if map_path exists
+    if map_path is not None and os.path.exists(map_path):
+        static_img = mpimg.imread(map_path)
+        plt.imshow(static_img, extent=(min_x, max_x, min_y, max_y), aspect='auto', alpha=0.3)
     # Plot 610 candidates as green crosses
     plt.scatter(candidate_610[:, 0], candidate_610[:, 1], marker='x', s=30, color='green', alpha=0.3, label='610 Candidates')
     # Plot 955 candidates as red crosses
@@ -970,10 +1050,10 @@ def baseline_solution(data):
 
     return Individual(x=x, E=E, y=y, Cost=cost)
 
-def run_and_plot_baseline(data, label, candidate_610=None, candidate_955=None):
+def run_and_plot_baseline(data, label, candidate_610=None, candidate_955=None, map_path=None):
     print(f"\n--- Running Baseline ({label}) ---")
     sol = baseline_solution(data)
-    plot_spatial_solution(sol, data, label, candidate_610=candidate_610, candidate_955=candidate_955)
+    plot_spatial_solution(sol, data, label, candidate_610=candidate_610, candidate_955=candidate_955, map_path=map_path)
     print(f"Saved Baseline spatial plot for {label} to spatial_solution_{label}.png")
     if sol.Cost is not None:
         print(f"Baseline cost: {sol.Cost[0]:.2f}, equity stddev: {sol.Cost[1]:.2f}")
@@ -1021,7 +1101,7 @@ def export_allocation_summary(solution, data, label):
     print(df.head(10).to_string(index=False))  # Print preview
 
 def run_and_plot_nsga(data, label, candidate_610=None, candidate_955=None, return_front=False,
-                      MaxIt=200, nPop=80, pCrossover=0.7, pMutation=0.15, patience=20):
+                      MaxIt=200, nPop=80, pCrossover=0.7, pMutation=0.15, patience=20, map_path=None):
     print(f"\n--- Running NSGA-II ({label}) ---")
     pareto_front, data, all_fronts, evolution_stats = nsga_ii_optimization_with_label(
         data, label, MaxIt, nPop, pCrossover, pMutation, patience, log_file=f'output/nsga_log_{label}.txt')
@@ -1032,7 +1112,7 @@ def run_and_plot_nsga(data, label, candidate_610=None, candidate_955=None, retur
     costs = np.array([ind.Cost for ind in pareto_front])
     min_cost_idx = np.argmin(costs[:, 0])
     best_solution = pareto_front[min_cost_idx]
-    plot_spatial_solution(best_solution, data, label, candidate_610=candidate_610, candidate_955=candidate_955)
+    plot_spatial_solution(best_solution, data, label, candidate_610=candidate_610, candidate_955=candidate_955, map_path=map_path)
     print(f"Saved NSGA-II spatial plot for {label} to spatial_solution_{label}.png")
     print(f"NSGA-II best cost: {best_solution.Cost[0]:.2f}, equity stddev: {best_solution.Cost[1]:.2f}")
     export_allocation_summary(best_solution, data, label)
@@ -1133,8 +1213,8 @@ def main():
         f.write("NSGA-II Supply Chain Optimization Log\n")
 
     # Set NSGA-II parameters once
-    MaxIt = 10 # Recommended value from 150 to 300
-    nPop = 10 # Recommended value from 50 to 100
+    MaxIt = 150 # Recommended value from 150 to 300
+    nPop = 80 # Recommended value from 50 to 100
     pCrossover = 0.7
     pMutation = 0.15
     patience = 20
@@ -1160,14 +1240,26 @@ def main():
         with open(log_file, "a") as f:
             f.write(f"NSGA-II Parameters for 610 Candidates: MaxIt={MaxIt}, nPop={nPop}, pCrossover={pCrossover}, pMutation={pMutation}, patience={patience}\n")
 
+
+    # fetch a realistic map if possible. 
+    min_x, max_x, min_y, max_y = get_bounding_box(candidate_610, candidate_955, margin=0.05)
+    try:
+        img = fetch_osm_static_map(min_x, max_x, min_y, max_y, width=800, height=600)
+        img.save("output/static_map.png")
+        map_path = "output/static_map.png"
+    except Exception as e:
+        print(f"Could not fetch OSM static map: {e}")
+        map_path = None
+
     # Plot all candidates with demand
     E_L = data_610['E_L']  # or data_955['E_L'], they should be the same
-    plot_all_candidates_with_demand(candidate_610, candidate_955, xy_community, E_L)
+    plot_all_candidates_with_demand(candidate_610, candidate_955, xy_community, E_L, map_path=map_path)
+
 
     # Run and plot baseline solutions
-    sys.stdout = open(log_file, "a")  # Redirect print to log file as well as console
-    run_and_plot_baseline(data_610, "baseline_610", candidate_610, candidate_955)
-    run_and_plot_baseline(data_955, "baseline_955", candidate_610, candidate_955)
+    # sys.stdout = open(log_file, "a")  # Redirect print to log file as well as console
+    run_and_plot_baseline(data_610, "baseline_610", candidate_610, candidate_955, map_path=map_path)
+    run_and_plot_baseline(data_955, "baseline_955", candidate_610, candidate_955, map_path=map_path)
 
     # Create parameter hashes for cache filenames
     param_hash_610 = get_param_hash(data_610, MaxIt, nPop, pCrossover, pMutation, patience)
@@ -1175,25 +1267,42 @@ def main():
     cache_file_610 = f"output/nsga_610_cache_{param_hash_610}.pkl"
     cache_file_955 = f"output/nsga_955_cache_{param_hash_955}.pkl"
 
-    if cache_exists(cache_file_610):
-        pareto_front_610 = load_cache(cache_file_610)
-    else:
-        pareto_front_610 = run_and_plot_nsga(data_610, "nsga_610", candidate_610, candidate_955, return_front=True,
-                                             MaxIt=MaxIt, nPop=nPop, pCrossover=pCrossover, pMutation=pMutation, patience=patience)
-        save_cache(pareto_front_610, cache_file_610)
 
-    if cache_exists(cache_file_955):
-        pareto_front_955 = load_cache(cache_file_955)
-    else:
-        pareto_front_955 = run_and_plot_nsga(data_955, "nsga_955", candidate_610, candidate_955, return_front=True,
-                                             MaxIt=MaxIt, nPop=nPop, pCrossover=pCrossover, pMutation=pMutation, patience=patience)
-        save_cache(pareto_front_955, cache_file_955)
 
+
+
+    # Prepare arguments for parallel run
+    args_610 = (data_610, "nsga_610", candidate_610, candidate_955, cache_file_610, MaxIt, nPop, pCrossover, pMutation, patience, map_path)
+    args_955 = (data_955, "nsga_955", candidate_610, candidate_955, cache_file_955, MaxIt, nPop, pCrossover, pMutation, patience, map_path)
+    args_list = [args_610, args_955]  # or more if needed
+    pareto_front_610 = None
+    pareto_front_955 = None
+
+    labels = ["nsga_610", "nsga_955"]
+    monitor_thread = threading.Thread(target=monitor_progress, args=(labels, MaxIt))
+    monitor_thread.start()
+
+    with concurrent.futures.ProcessPoolExecutor(max_workers=2) as executor:
+            future_to_label = {}
+            futures = []
+            for args in args_list:
+                future = executor.submit(run_nsga_with_cache, args)
+                future_to_label[future] = args[1]  # args[1] is the label ("nsga_610" or "nsga_955")
+                futures.append(future)
+            for f in concurrent.futures.as_completed(futures):
+                result = f.result()
+                label = future_to_label[f]
+                if "610" in label:
+                    pareto_front_610 = result
+                else:
+                    pareto_front_955 = result
+
+    monitor_thread.join()
     plot_final_pareto_comparison(pareto_front_610, pareto_front_955)
     export_final_solution_comparison(pareto_front_610, pareto_front_955)
     plot_final_solution_comparison(pareto_front_610, pareto_front_955, label_610="610", label_955="955")
 
-    sys.stdout = sys.__stdout__  # Restore print to console
+    #sys.stdout = sys.__stdout__  # Restore print to console
 
 if __name__ == "__main__":
     main()
