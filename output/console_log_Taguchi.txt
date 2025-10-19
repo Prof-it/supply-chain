@@ -1,0 +1,11 @@
+2025-10-18 15:09:19,508 - INFO - NSGA-II Supply Chain Optimization Log Started
+2025-10-18 15:09:19,634 - INFO - NSGA-II Parameters: MaxIt=300, nPop=50, pCrossover=0.7, pMutation=0.15, patience=20
+2025-10-18 15:09:19,693 - WARNING - Could not fetch OSM static map: HTTPSConnectionPool(host='staticmap.openstreetmap.de', port=443): Max retries exceeded with url: /staticmap.php?center=5217.7,5135.83&zoom=12&size=800x600&maptype=mapnik (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x10973f4d0>: Failed to resolve 'staticmap.openstreetmap.de' ([Errno 8] nodename nor servname provided, or not known)"))
+2025-10-18 15:15:13,214 - INFO - NSGA-II Supply Chain Optimization Completed
+2025-10-18 16:02:51,146 - INFO - NSGA-II Supply Chain Optimization Log Started
+2025-10-18 16:02:52,347 - INFO - NSGA-II Parameters: MaxIt=300, nPop=50, pCrossover=0.7, pMutation=0.15, patience=20
+2025-10-18 16:02:52,444 - WARNING - Could not fetch OSM static map: HTTPSConnectionPool(host='staticmap.openstreetmap.de', port=443): Max retries exceeded with url: /staticmap.php?center=5217.7,5135.83&zoom=12&size=800x600&maptype=mapnik (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x10d6374d0>: Failed to resolve 'staticmap.openstreetmap.de' ([Errno 8] nodename nor servname provided, or not known)"))
+2025-10-18 16:29:50,093 - INFO - NSGA-II Supply Chain Optimization Log Started
+2025-10-18 16:29:50,262 - INFO - NSGA-II Parameters: MaxIt=300, nPop=50, pCrossover=0.7, pMutation=0.15, patience=20
+2025-10-18 16:29:50,268 - WARNING - Could not fetch OSM static map: HTTPSConnectionPool(host='staticmap.openstreetmap.de', port=443): Max retries exceeded with url: /staticmap.php?center=5217.7,5135.83&zoom=12&size=800x600&maptype=mapnik (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x10aec34d0>: Failed to resolve 'staticmap.openstreetmap.de' ([Errno 8] nodename nor servname provided, or not known)"))
+2025-10-18 16:35:37,862 - INFO - NSGA-II Supply Chain Optimization Completed
