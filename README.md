@@ -131,6 +131,13 @@ This will open a new browser window with the interactive map interface.
 
 ```bash
  python nsga_reproduced.py
+```
+
+## Project development process / Methodology
+
+![CRISP-XAI Diagram](crisp-xai.png)
+
+![NSGA2-Flowchart](nsga2-flowchart.png)
 
 ## Optional Extensions
 

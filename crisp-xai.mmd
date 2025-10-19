@@ -1,0 +1,29 @@
+graph TD
+subgraph Continuous Lifecycle
+    direction LR
+    I[7 Monitoring]
+    K[7 Retraining]
+    I --> K
+    K --> I
+end
+
+A[1 Business Understanding - MOLAP and Objectives] --> B[2 Data Understanding and Acquisition]
+B --> C[3 Data Engineering and EDA]
+C --> D[4 Modelling NSGA-II Refinement]
+D --> E[5 Evaluation and Explanation]
+E --> J[6 Deployment PoC - London Simulation]
+J --> I
+
+E -- Re-evaluate Model or Tuning --> D
+E -- Data or Feature Issues --> C
+
+I -- New Business Goal --> A
+
+style A fill:#FFFFFF,stroke:#212121,stroke-width:2px,color:#212121;
+style B fill:#FFFFFF,stroke:#212121,stroke-width:2px,color:#212121;
+style C fill:#FFFFFF,stroke:#212121,stroke-width:2px,color:#212121;
+style D fill:#FFFFFF,stroke:#212121,stroke-width:2px,color:#212121;
+style E fill:#FFFFFF,stroke:#212121,stroke-width:2px,color:#212121;
+style J fill:#FFFFFF,stroke:#212121,stroke-width:2px,color:#212121;
+style I fill:#FFFFFF,stroke:#212121,stroke-width:2px,color:#212121;
+style K fill:#F5F5F5,stroke:#757575,stroke-width:2px,color:#212121;      %% light grey for retraining

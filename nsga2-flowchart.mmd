@@ -1,0 +1,31 @@
+flowchart LR
+    A[1 Initial <br/>Population] --> B[2 Non-<br/>dominated<br/>Sorting]
+    B --> C[3 Selection]
+    
+    %% Decision: check improvement over patience steps before applying genetic operators
+    C --> G{Improving?}
+    G -- No --> E(( ))
+    
+    subgraph GeneticOps[4 Genetic Operators]
+        direction TB
+        C1[Crossover]
+        C2[Mutation]
+        %% No arrow between C1 and C2 => they are independent
+    end
+
+    %% Both operators are triggered independently and both feed into Merge
+    G -- Yes --> C1
+    G -- Yes --> C2
+    C1 --> D[5 Merge]
+    C2 --> D 
+    D --> B
+
+    %% Styles: white background, dark border and text
+    style A fill:#FFFFFF,stroke:#212121,stroke-width:2px,color:#212121
+    style B fill:#FFFFFF,stroke:#212121,stroke-width:2px,color:#212121
+    style C fill:#FFFFFF,stroke:#212121,stroke-width:2px,color:#212121
+    style G fill:#FFFFFF,stroke:#212121,stroke-width:2px,color:#212121
+    style C1 fill:#FFFFFF,stroke:#212121,stroke-width:2px,color:#212121
+    style C2 fill:#FFFFFF,stroke:#212121,stroke-width:2px,color:#212121
+    style D fill:#FFFFFF,stroke:#212121,stroke-width:2px,color:#212121
+    style E fill:#000000,stroke:#000000,stroke-width:2px,color:#000000
